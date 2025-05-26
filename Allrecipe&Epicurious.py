@@ -173,20 +173,37 @@ class AllRecipes(SiteScraper):
                 if '-recipe-' in href:
                     urls.add(canonicalize_url(href.split('?')[0]))
             time.sleep(random.uniform(self.delay, DELAY_MAX))
-        print(urls)
         return urls
 
-    def extract_comments(self, soup):
+    def extract_feedback(self, soup):
         comments = []
-        for div in soup.select('div.review-container'):
-            author = div.select_one('h4.author-name')
-            text   = div.select_one('p.review-text')
-            if author and text:
+        container = soup.find('div', class_='feedback-list mm-recipes-feedback-list')
+        if not container:
+            return comments
+
+        feedback = container.find_all('div', class_='feedback reviews')
+        for review in feedback:
+            heading = review.find('div', class_='feedback_title')
+            heading_text = heading.find('h2').get_text(strip=True) if heading and heading.find('h2') else None
+
+            meta = review.find('div', class_='feedback_meta')
+            author = meta.get_text(strip=True) if meta else None
+
+            body_container = review.find('div', class_='feedback_body-container')
+            body_text = body_container.get_text(strip=True) if body_container else None
+
+            if author and body_text:
                 comments.append({
-                    'author': author.get_text(strip=True),
-                    'text':   text.get_text(strip=True)
+                    'author': author,
+                    'title': heading_text,
+                    'text': body_text
                 })
+
         return comments
+
+    # ✅ Implement abstract method
+    def extract_comments(self, soup):
+        return self.extract_feedback(soup)
 
 
 class Epicurious(SiteScraper):
