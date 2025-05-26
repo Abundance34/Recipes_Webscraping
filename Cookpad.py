@@ -1,39 +1,106 @@
-import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import json
 import time
-import os  # Added missing import
+import os
 
-# Set up output path
-OUTPUT_FILE = os.path.join(os.path.expanduser('~'), 'Documents', 'cookpad_recipes.jsonl')
+OUTPUT_FILE = 'cookpad_recipes.jsonl'
 
-def scrape_cookpad_recipe(url):
-    headers = {"User-Agent": "Mozilla/5.0"}
+
+def setup_driver():
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")  # Run in background
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    return driver
+
+
+def scrape_comments(driver, url):
     try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
+        driver.get(url)
 
-        soup = BeautifulSoup(response.content, 'html.parser')
+        # Wait for comment section to load
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div[id^='comment'], [class*='comment']"))
+        )
 
-        # Extract data
+        # Click "View all comments" if exists
+        try:
+            view_all = driver.find_element(By.XPATH, "//a[contains(., 'view all comments') or contains(., 'View all')]")
+            driver.execute_script("arguments[0].click();", view_all)
+            time.sleep(2)  # Allow comments to load
+        except:
+            pass
+
+        # Scroll to load lazy-loaded comments
+        last_height = driver.execute_script("return document.body.scrollHeight")
+        while True:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1)
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                break
+            last_height = new_height
+
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        comments = []
+
+        # Improved comment detection
+        comment_elements = soup.select(
+            '[class*="comment"] [class*="content"], [class*="comment"] [class*="text"], [class*="comment"] p, [class*="comment"] div')
+
+        for comment in comment_elements:
+            text = comment.get_text(' ', strip=True)
+            if text and len(text) > 20 and not any(x in text.lower() for x in ['reply', 'report', 'delete']):
+                comments.append(text)
+
+        return list(set(comments))  # Remove duplicates
+
+    except Exception as e:
+        print(f"Error loading comments: {str(e)}")
+        return []
+
+
+def scrape_cookpad_recipe(driver, url):
+    try:
+        driver.get(url)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
+
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+
+        # Title
         title = soup.find('h1').text.strip() if soup.find('h1') else "No title"
 
+        # Ingredients
         ingredients = []
         for ing in soup.select('[class*=ingredient]'):
             text = ing.get_text(strip=True)
             if text and text not in ingredients:
                 ingredients.append(text)
 
+        # Steps
         steps = []
         step_elements = soup.find_all('div', class_='step__text') or soup.find_all('li', class_='step')
         for idx, step in enumerate(step_elements, 1):
             steps.append(f"Step {idx}: {step.get_text(strip=True)}")
 
+        # Comments
+        comments = scrape_comments(driver, url)
+
         return {
             "title": title,
             "url": url,
             "ingredients": ingredients,
-            "steps": steps
+            "steps": steps,
+            "comments": comments
         }
 
     except Exception as e:
@@ -133,22 +200,23 @@ urls = [
     "https://cookpad.com/ng/recipes/352736-vegan-chocolate-peanut-butter-cookies",
 
 ]
+# Initialize driver once
+driver = setup_driver()
 
-# Scrape all recipes with delay
 all_recipes = []
 for url in urls:
     print(f"Scraping: {url}")
-    recipe = scrape_cookpad_recipe(url)
+    recipe = scrape_cookpad_recipe(driver, url)
     if recipe:
         all_recipes.append(recipe)
     time.sleep(2)
 
-print(f"📁 Will save recipes to: {os.path.abspath(OUTPUT_FILE)}")
+driver.quit()  # Close browser when done
 
-# Save to JSONL (one JSON object per line)
+# Save results
 with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
     for recipe in all_recipes:
         json_line = json.dumps(recipe, ensure_ascii=False)
         f.write(json_line + '\n')
 
-print(f"✅ Saved {len(all_recipes)} recipes to {OUTPUT_FILE}")
+print(f"✅ Saved {len(all_recipes)} recipes with comments to {OUTPUT_FILE}")
