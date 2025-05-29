@@ -4,7 +4,7 @@ We will be focusing on 5 food websites to scrap it's recipe : ALLrecipes, Epicur
 
 ### How many recipes and comments were scraped from each of the websites?
 
-For Allrecipe, I scraped 66 recipes and 0 comments (The website didn't have a single comment on it's recipes) - It's data set is recipe_dataset.
+For Allrecipe, I scraped 724 recipes and 700 comments
 
 For Epicurious, I scraped 240 recipes and 0 comments (The website didn't have a single comment on it's recipes).
 
