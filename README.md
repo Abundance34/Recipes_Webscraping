@@ -10,6 +10,6 @@ For Epicurious, I scraped 240 recipes and 0 comments (The website didn't have a 
 
 For food.com, I scraped 429 recipes and 424 comments.
 
-For Cookpad, I scraped 89 recipes and 0 comments (The website didn't have a single comment on it's recipes).
+For Cookpad, I scraped 1241 recipes 
 
 For Kitchenaid (Yummly), I scraped 35 recipes and 0 comments (The website didn't have a single comment on it's recipes)
